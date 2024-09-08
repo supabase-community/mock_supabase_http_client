@@ -247,6 +247,19 @@ class MockSupabaseHttpClient extends BaseClient {
       }
     }
 
+    // Handle maybeSingle
+    if (request.headers['Accept'] == 'application/json') {
+      if (result.isEmpty) {
+        return _createResponse(null, request: request);
+      } else if (result.length == 1) {
+        return _createResponse(result.first, request: request);
+      } else {
+        return _createResponse(
+            {'error': '${result.length} rows were found for maybeSingle query'},
+            statusCode: 405, request: request);
+      }
+    }
+
     return _createResponse(result, request: request);
   }
 

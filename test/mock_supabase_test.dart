@@ -381,11 +381,30 @@ void main() {
       expect(posts.length, 1);
       expect(posts.first, {'id': 1, 'title': 'First post'});
     });
-
     test('Single', () async {
       await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
       final post = await mockSupabase.from('posts').select().single();
       expect(post, {'id': 1, 'title': 'First post'});
+    });
+
+    test('maybeSingle', () async {
+      // Test with one record
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      var post = await mockSupabase.from('posts').select().maybeSingle();
+      expect(post, {'id': 1, 'title': 'First post'});
+
+      // Test with no records
+      await mockSupabase.from('posts').delete().eq('id', 1);
+      post = await mockSupabase.from('posts').select().maybeSingle();
+      expect(post, null);
+
+      // Test with multiple records
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      expect(() => mockSupabase.from('posts').select().maybeSingle(),
+          throwsException);
     });
   });
 }
