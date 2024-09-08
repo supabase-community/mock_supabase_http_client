@@ -65,12 +65,18 @@ class MockSupabaseHttpClient extends BaseClient {
     if (!_database.containsKey(tableName)) {
       _database[tableName] = [];
     }
-    if (data is! Map<String, dynamic>) {
+    if (data is Map<String, dynamic>) {
+      _database[tableName]!.add(data);
+      return _createResponse(data, request: request);
+    } else if (data is List) {
+      final List<Map<String, dynamic>> items =
+          List<Map<String, dynamic>>.from(data);
+      _database[tableName]!.addAll(items);
+      return _createResponse(items, request: request);
+    } else {
       return _createResponse({'error': 'Invalid data format'},
           statusCode: 400, request: request);
     }
-    _database[tableName]!.add(data);
-    return _createResponse(data, request: request);
   }
 
   StreamedResponse _handleUpdate(
@@ -92,7 +98,7 @@ class MockSupabaseHttpClient extends BaseClient {
     // Update items that match the filters
     if (_database.containsKey(tableName)) {
       for (var row in _database[tableName]!) {
-        if (_matchesFilters(row, queryParams)) {
+        if (_matchesFilters(row: row, filters: queryParams)) {
           row.addAll(data);
           updated = true;
         }
@@ -114,14 +120,18 @@ class MockSupabaseHttpClient extends BaseClient {
   /// If any filter doesn't match, the method returns false.
   /// If all filters match, it returns true.
   ///
-  /// [item] The item to check against the filters.
+  /// [row] The item to check against the filters.
   /// [filters] A map of filter keys and their corresponding values.
   /// Returns true if the item matches all filters, false otherwise.
-  bool _matchesFilters(Map<String, dynamic> item, Map<String, String> filters) {
+  bool _matchesFilters({
+    required Map<String, dynamic> row,
+    required Map<String, String> filters,
+  }) {
     // Check if an item matches the provided filters
-    for (var key in filters.keys) {
-      final filter = _parseFilter(key, filters[key]!);
-      if (!filter(item)) {
+    for (var columnName in filters.keys) {
+      final filter = _parseFilter(
+          columnName: columnName, postrestFilter: filters[columnName]!);
+      if (!filter(row)) {
         return false;
       }
     }
@@ -175,8 +185,8 @@ class MockSupabaseHttpClient extends BaseClient {
     }
 
     if (_database.containsKey(tableName)) {
-      _database[tableName]!
-          .removeWhere((item) => _matchesFilters(item, queryParams));
+      _database[tableName]!.removeWhere(
+          (row) => _matchesFilters(row: row, filters: queryParams));
     }
 
     return _createResponse({'message': 'Deleted'}, request: request);
@@ -193,38 +203,144 @@ class MockSupabaseHttpClient extends BaseClient {
 
     // Handle basic filtering
     queryParams.forEach((key, value) {
-      if (key != 'select') {
-        final filter = _parseFilter(key, value);
+      if (key != 'select' &&
+          key != 'order' &&
+          key != 'limit' &&
+          key != 'range') {
+        final filter = _parseFilter(columnName: key, postrestFilter: value);
         result = result.where((item) => filter(item)).toList();
       }
     });
 
+    // Handle ordering
+    if (queryParams.containsKey('order')) {
+      final orderParams = queryParams['order']!.split('.');
+      final field = orderParams[0];
+      final ascending = orderParams.length == 1 || orderParams[1] != 'desc';
+      result.sort((a, b) => ascending
+          ? a[field].compareTo(b[field])
+          : b[field].compareTo(a[field]));
+    }
+
+    // Handle limiting
+    if (queryParams.containsKey('limit')) {
+      final limit = int.parse(queryParams['limit']!);
+      result = result.take(limit).toList();
+    }
+
+    // Handle range
+    if (queryParams.containsKey('range')) {
+      final rangeParams = queryParams['range']!.split('-');
+      final start = int.parse(rangeParams[0]);
+      final end = int.parse(rangeParams[1]);
+      result = result.sublist(start, end + 1);
+    }
+
+    // Handle single
+    if (request.headers['Accept'] == 'application/vnd.pgrst.object+json') {
+      if (result.length == 1) {
+        return _createResponse(result.first, request: request);
+      } else {
+        return _createResponse(
+            {'error': '${result.length} rows were found for single query'},
+            request: request);
+      }
+    }
+
     return _createResponse(result, request: request);
   }
 
-  Function(Map<String, dynamic>) _parseFilter(String key, String value) {
+  bool Function(Map<String, dynamic> row) _parseFilter({
+    required String columnName,
+    required String postrestFilter,
+  }) {
     // Parse filters from query parameters
-    if (key.contains('eq.')) {
-      final field = key.split('eq.')[1];
-      return (item) => item[field] == value;
-    } else if (key.contains('neq.')) {
-      final field = key.split('neq.')[1];
-      return (item) => item[field] != value;
-    } else if (key.contains('gte.')) {
-      final field = key.split('gte.')[1];
-      return (item) => item[field] >= num.tryParse(value);
-    } else if (key.contains('lte.')) {
-      final field = key.split('lte.')[1];
-      return (item) => item[field] <= num.tryParse(value);
-    } else if (key.contains('like.')) {
-      final field = key.split('like.')[1];
+    if (columnName == 'or') {
+      final orFilters =
+          postrestFilter.substring(1, postrestFilter.length - 1).split(',');
+      return (row) {
+        return orFilters.any((filter) {
+          final parts = filter.split('.');
+          final subColumnName = parts[0];
+          final operator = parts[1];
+          final value = parts.sublist(2).join('.');
+          final subFilter = _parseFilter(
+              columnName: subColumnName, postrestFilter: '$operator.$value');
+          return subFilter(row);
+        });
+      };
+    } else if (postrestFilter.startsWith('eq.')) {
+      final value = postrestFilter.substring(3);
+      return (row) => row[columnName].toString() == value;
+    } else if (postrestFilter.startsWith('neq.')) {
+      final value = postrestFilter.substring(4);
+      return (row) => row[columnName].toString() != value;
+    } else if (postrestFilter.startsWith('gt.')) {
+      final value = postrestFilter.substring(3);
+      return (row) => row[columnName] > num.tryParse(value);
+    } else if (postrestFilter.startsWith('lt.')) {
+      final value = postrestFilter.substring(3);
+      return (row) => row[columnName] < num.tryParse(value);
+    } else if (postrestFilter.startsWith('gte.')) {
+      final value = postrestFilter.substring(4);
+      return (row) => row[columnName] >= num.tryParse(value);
+    } else if (postrestFilter.startsWith('lte.')) {
+      final value = postrestFilter.substring(4);
+      return (row) => row[columnName] <= num.tryParse(value);
+    } else if (postrestFilter.startsWith('like.')) {
+      final value = postrestFilter.substring(5);
       final regex = RegExp(value.replaceAll('%', '.*'));
-      return (item) => regex.hasMatch(item[field]);
-    } else if (key.contains('is.')) {
-      final field = key.split('is.')[1];
-      return (item) => item[field] == null;
+      return (row) => regex.hasMatch(row[columnName]);
+    } else if (postrestFilter == 'is.null') {
+      return (row) => row[columnName] == null;
+    } else if (postrestFilter.startsWith('in.')) {
+      final value = postrestFilter.substring(3);
+      final values = value.substring(1, value.length - 1).split(',');
+      return (row) => values.contains(row[columnName].toString());
+    } else if (postrestFilter.startsWith('cs.')) {
+      final value = postrestFilter.substring(3);
+      if (value.startsWith('{') && value.endsWith('}')) {
+        // Array case
+        final values = value.substring(1, value.length - 1).split(',');
+        return (row) => values.every((v) {
+              final decodedValue = v.startsWith('"') && v.endsWith('"')
+                  ? jsonDecode(v)
+                  : v.toString();
+              return (row[columnName] as List).contains(decodedValue);
+            });
+      } else {
+        throw UnimplementedError(
+            'JSON and range operators in contains is not yet supported');
+      }
+    } else if (postrestFilter.startsWith('containedBy.')) {
+      final value = postrestFilter.substring(12);
+      final values = jsonDecode(value);
+      return (row) =>
+          values.every((v) => (row[columnName] as List).contains(v));
+    } else if (postrestFilter.startsWith('overlaps.')) {
+      final value = postrestFilter.substring(9);
+      final values = jsonDecode(value);
+      return (row) =>
+          (row[columnName] as List).any((element) => values.contains(element));
+    } else if (postrestFilter.startsWith('fts.')) {
+      final value = postrestFilter.substring(4);
+      return (row) => (row[columnName] as String).contains(value);
+    } else if (postrestFilter.startsWith('match.')) {
+      final value = jsonDecode(postrestFilter.substring(6));
+      return (row) {
+        if (row[columnName] is! Map) return false;
+        final rowMap = row[columnName] as Map<String, dynamic>;
+        return value.entries.every((entry) => rowMap[entry.key] == entry.value);
+      };
+    } else if (postrestFilter.startsWith('not.')) {
+      final parts = postrestFilter.split('.');
+      final operator = parts[1];
+      final value = parts.sublist(2).join('.');
+      final filter = _parseFilter(
+          columnName: columnName, postrestFilter: '$operator.$value');
+      return (row) => !filter(row);
     }
-    return (item) => true;
+    return (row) => true;
   }
 
   StreamedResponse _createResponse(dynamic data,

@@ -77,27 +77,27 @@ void main() {
 
     test('Select', () async {
       // Test selecting records
-      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
-      await mockSupabase
-          .from('posts')
-          .insert({'id': 2, 'title': 'Second post'});
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
       final posts = await mockSupabase.from('posts').select().order('id');
       expect(posts.length, 2);
-      expect(posts[0], {'id': 1, 'title': 'First post'});
-      expect(posts[1], {'id': 2, 'title': 'Second post'});
+      expect(posts[0], {'id': 2, 'title': 'Second post'});
+      expect(posts[1], {'id': 1, 'title': 'First post'});
     });
   });
 
   group('Filter tests', () {
     test('Filter by equality', () async {
       // Test filtering by equality
-      await mockSupabase.from('posts').insert({'title': 'Hello, world!'});
-      final posts = await mockSupabase
-          .from('posts')
-          .select()
-          .eq('title', 'Hello, world!');
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().eq('id', 2);
       expect(posts.length, 1);
-      expect(posts.first, {'title': 'Hello, world!'});
+      expect(posts.first, {'id': 2, 'title': 'Second post'});
     });
 
     test('Filter by inequality', () async {
@@ -113,10 +113,10 @@ void main() {
 
     test('Filter by range', () async {
       // Test filtering by range
-      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
-      await mockSupabase
-          .from('posts')
-          .insert({'id': 2, 'title': 'Second post'});
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
       final posts =
           await mockSupabase.from('posts').select().gte('id', 1).lte('id', 2);
       expect(posts.length, 2);
@@ -138,6 +138,254 @@ void main() {
           await mockSupabase.from('posts').select().isFilter('title', null);
       expect(posts.length, 1);
       expect(posts.first, {'title': null});
+    });
+
+    test('Filter by greater than', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().gt('id', 1);
+      expect(posts.length, 1);
+      expect(posts.first, {'id': 2, 'title': 'Second post'});
+    });
+
+    test('Filter by less than', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().lt('id', 2);
+      expect(posts.length, 1);
+      expect(posts.first, {'id': 1, 'title': 'First post'});
+    });
+
+    test('Filter by greater than or equal', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().gte('id', 1);
+      expect(posts.length, 2);
+    });
+
+    test('Filter by less than or equal', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().lte('id', 2);
+      expect(posts.length, 2);
+    });
+
+    test('Filter by in', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts =
+          await mockSupabase.from('posts').select().inFilter('id', [1, 2]);
+      expect(posts.length, 2);
+    });
+    group('Not filters', () {
+      setUp(() async {
+        await mockSupabase.from('posts').insert([
+          {
+            'id': 1,
+            'title': 'First post',
+            'views': 100,
+            'tags': ['tag1', 'tag2']
+          },
+          {
+            'id': 2,
+            'title': 'Second post',
+            'views': 200,
+            'tags': ['tag2', 'tag3']
+          },
+          {
+            'id': 3,
+            'title': 'Third post',
+            'views': 300,
+            'tags': ['tag3', 'tag4']
+          }
+        ]);
+      });
+
+      test('Filter by not equal', () async {
+        final posts =
+            await mockSupabase.from('posts').select().not('id', 'eq', 1);
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([2, 3]));
+      });
+
+      test('Filter by not greater than', () async {
+        final posts =
+            await mockSupabase.from('posts').select().not('views', 'gt', 200);
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([1, 2]));
+      });
+
+      test('Filter by not less than', () async {
+        final posts =
+            await mockSupabase.from('posts').select().not('views', 'lt', 200);
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([2, 3]));
+      });
+
+      test('Filter by not like', () async {
+        final posts = await mockSupabase
+            .from('posts')
+            .select()
+            .not('title', 'like', '%Second%');
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([1, 3]));
+      });
+
+      test('Filter by not in', () async {
+        final posts =
+            await mockSupabase.from('posts').select().not('id', 'in', '(1,2)');
+        expect(posts.length, 1);
+        expect(posts.first['id'], 3);
+      });
+
+      test('Filter by not contains', () async {
+        final posts = await mockSupabase
+            .from('posts')
+            .select()
+            .not('tags', 'cs', '{"tag1"}');
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([2, 3]));
+      });
+
+      test('Combine not with and', () async {
+        final posts = await mockSupabase
+            .from('posts')
+            .select()
+            .not('id', 'eq', 1)
+            .not('views', 'gt', 250);
+        expect(posts.length, 1);
+        expect(posts.first['id'], 2);
+      });
+
+      test('Combine not with or', () async {
+        final posts = await mockSupabase
+            .from('posts')
+            .select()
+            .or('id.not.eq.1,views.not.lte.200');
+        expect(posts.length, 2);
+        expect(posts.map((post) => post['id']), containsAll([2, 3]));
+      });
+    });
+
+    test('Filter by contains', () async {
+      await mockSupabase.from('posts').insert([
+        {
+          'id': 1,
+          'tags': ['tag1', 'tag2']
+        },
+        {
+          'id': 2,
+          'tags': ['tag1', 'tag3']
+        },
+        {
+          'id': 3,
+          'tags': ['tag2', 'tag3']
+        },
+      ]);
+      final posts =
+          await mockSupabase.from('posts').select().contains('tags', ['tag1']);
+      expect(posts.length, 2);
+      expect(posts.map((post) => post['id']), containsAll([1, 2]));
+    });
+
+    test('Filter by contained by', () async {
+      await mockSupabase.from('posts').insert({
+        'tags': ['tag1']
+      });
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .containedBy('tags', ['tag1', 'tag2']);
+      expect(posts.length, 1);
+      expect(posts.first, {
+        'tags': ['tag1']
+      });
+    });
+
+    test('Filter by overlap', () async {
+      await mockSupabase.from('posts').insert({
+        'tags': ['tag1', 'tag2']
+      });
+      final posts =
+          await mockSupabase.from('posts').select().overlaps('tags', ['tag2']);
+      expect(posts.length, 1);
+      expect(posts.first, {
+        'tags': ['tag1', 'tag2']
+      });
+    });
+
+    test('Filter by full text search', () async {
+      await mockSupabase.from('posts').insert({'content': 'Hello world'});
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .textSearch('content', 'Hello');
+      expect(posts.length, 1);
+      expect(posts.first, {'content': 'Hello world'});
+    });
+
+    test('Filter by match', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post', 'content': 'Hello world'},
+        {'id': 2, 'title': 'More Posts', 'content': 'Hello world'},
+        {'id': 3, 'title': 'More Posts', 'content': 'Hello world'}
+      ]);
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .match({'title': 'More Posts', 'content': 'Hello world'});
+      expect(posts.length, 2);
+      expect(posts.map((post) => post['id']), containsAll([2, 3]));
+    });
+  });
+
+  group('Modifier tests', () {
+    test('Limit', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().limit(1);
+      expect(posts.length, 1);
+    });
+
+    test('Order', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .order('id', ascending: false);
+      expect(posts.length, 2);
+      expect(posts.first, {'id': 2, 'title': 'Second post'});
+    });
+
+    test('Range', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase.from('posts').select().range(0, 0);
+      expect(posts.length, 1);
+      expect(posts.first, {'id': 1, 'title': 'First post'});
+    });
+
+    test('Single', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final post = await mockSupabase.from('posts').select().single();
+      expect(post, {'id': 1, 'title': 'First post'});
     });
   });
 }
