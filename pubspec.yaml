@@ -1,7 +1,8 @@
 name: mock_supabase_http_client
 description: A mock supabase http client for testing Supabase APIs
 version: 0.0.1
-# repository: https://github.com/my_org/my_repo
+homepage: 'https://supabase.com'
+repository: https://github.com/supabase-community/mock_supabase_http_client
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
