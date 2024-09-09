@@ -612,7 +612,7 @@ void main() {
       final posts = await mockSupabase
           .from('posts')
           .select('*, comments(*)')
-          .order('comments.id', ascending: false);
+          .order('id', ascending: false, referencedTable: 'comments');
       expect(posts.length, 2);
       expect(posts.first['comments'].first['id'], 2);
     });
@@ -639,7 +639,7 @@ void main() {
       final posts = await mockSupabase
           .from('posts')
           .select('*, authors(*)')
-          .order('comments.id', ascending: true)
+          .order('id', ascending: true, referencedTable: 'comments')
           .range(1, 2, referencedTable: 'comments');
       expect(posts.length, 2);
       expect(posts[0]['comments'].length, 1);
