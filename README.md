@@ -65,6 +65,9 @@ void main() {
 ## Limitations
 
 - The mock Supabase client does not support embedded resources (querying related tables).
+- Renaming column names
+- count and head requests
+- aggregate functions
 - The mock Supabase client does not support auth, realtime, storage, or calling edge functions.
     - You can either mock those using libraries like [mockito](https://pub.dev/packages/mockito) or use the Supabase CLI to do a full integration testing. You could use our [GitHub actions](https://github.com/supabase/setup-cli) to do that.
 

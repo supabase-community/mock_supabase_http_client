@@ -74,17 +74,161 @@ void main() {
       final posts = await mockSupabase.from('posts').select();
       expect(posts.length, 0);
     });
-
-    test('Select', () async {
-      // Test selecting records
+    test('Select all columns', () async {
+      // Test selecting all records
       await mockSupabase.from('posts').insert([
-        {'id': 1, 'title': 'First post'},
-        {'id': 2, 'title': 'Second post'}
+        {'id': 1, 'title': 'First post', 'content': 'Content of first post'},
+        {'id': 2, 'title': 'Second post', 'content': 'Content of second post'}
       ]);
       final posts = await mockSupabase.from('posts').select().order('id');
       expect(posts.length, 2);
-      expect(posts[0], {'id': 2, 'title': 'Second post'});
-      expect(posts[1], {'id': 1, 'title': 'First post'});
+
+      // Order by id descending by default
+      expect(posts[0], {
+        'id': 2,
+        'title': 'Second post',
+        'content': 'Content of second post'
+      });
+      expect(posts[1],
+          {'id': 1, 'title': 'First post', 'content': 'Content of first post'});
+    });
+
+    test('Select specific columns', () async {
+      // Test selecting specific columns
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post', 'content': 'Content of first post'},
+        {'id': 2, 'title': 'Second post', 'content': 'Content of second post'}
+      ]);
+      final titlesOnly =
+          await mockSupabase.from('posts').select('id, title').order('id');
+      expect(titlesOnly.length, 2);
+      expect(titlesOnly[0], {'id': 2, 'title': 'Second post'});
+      expect(titlesOnly[1], {'id': 1, 'title': 'First post'});
+    });
+  });
+
+  group('custom schema basic CRUD tests', () {
+    test('Insert', () async {
+      // Test inserting a record
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .insert({'title': 'Hello, world!'});
+      final posts =
+          await mockSupabase.schema('custom_schema').from('posts').select();
+      expect(posts.length, 1);
+      expect(posts.first, {'title': 'Hello, world!'});
+    });
+
+    test('Upsert', () async {
+      // Test upserting a record
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .upsert({'id': 1, 'title': 'Initial post'});
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .upsert({'id': 1, 'title': 'Updated post'});
+      final posts =
+          await mockSupabase.schema('custom_schema').from('posts').select();
+      expect(posts.length, 1);
+      expect(posts.first, {'id': 1, 'title': 'Updated post'});
+    });
+
+    test('Update', () async {
+      // Test updating a record
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .insert({'id': 1, 'title': 'Original title'});
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .update({'title': 'Updated title'}).eq('id', 1);
+      final posts =
+          await mockSupabase.schema('custom_schema').from('posts').select();
+      expect(posts.length, 1);
+      expect(posts.first, {'id': 1, 'title': 'Updated title'});
+    });
+
+    test('Delete', () async {
+      // Test deleting a record
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .insert({'id': 1, 'title': 'To be deleted'});
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .delete()
+          .eq('id', 1);
+      final posts =
+          await mockSupabase.schema('custom_schema').from('posts').select();
+      expect(posts.length, 0);
+    });
+
+    test('Select all columns', () async {
+      // Test selecting all records
+      await mockSupabase.schema('custom_schema').from('posts').insert([
+        {'id': 1, 'title': 'First post', 'content': 'Content of first post'},
+        {'id': 2, 'title': 'Second post', 'content': 'Content of second post'}
+      ]);
+      final posts = await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .select()
+          .order('id');
+      expect(posts.length, 2);
+
+      // Order by id descending by default
+      expect(posts[0], {
+        'id': 2,
+        'title': 'Second post',
+        'content': 'Content of second post'
+      });
+      expect(posts[1],
+          {'id': 1, 'title': 'First post', 'content': 'Content of first post'});
+    });
+
+    test('Select specific columns', () async {
+      // Test selecting specific columns
+      await mockSupabase.schema('custom_schema').from('posts').insert([
+        {'id': 1, 'title': 'First post', 'content': 'Content of first post'},
+        {'id': 2, 'title': 'Second post', 'content': 'Content of second post'}
+      ]);
+      final titlesOnly = await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .select('id, title')
+          .order('id');
+      expect(titlesOnly.length, 2);
+      expect(titlesOnly[0], {'id': 2, 'title': 'Second post'});
+      expect(titlesOnly[1], {'id': 1, 'title': 'First post'});
+    });
+
+    test('No mixing with default schema', () async {
+      // Insert into custom schema
+      await mockSupabase
+          .schema('custom_schema')
+          .from('posts')
+          .insert({'id': 1, 'title': 'Custom schema post'});
+
+      // Insert into default schema
+      await mockSupabase
+          .from('posts')
+          .insert({'id': 2, 'title': 'Default schema post'});
+
+      // Check custom schema
+      final customPosts =
+          await mockSupabase.schema('custom_schema').from('posts').select();
+      expect(customPosts.length, 1);
+      expect(customPosts.first, {'id': 1, 'title': 'Custom schema post'});
+
+      // Check default schema
+      final defaultPosts = await mockSupabase.from('posts').select();
+      expect(defaultPosts.length, 1);
+      expect(defaultPosts.first, {'id': 2, 'title': 'Default schema post'});
     });
   });
 
@@ -405,6 +549,65 @@ void main() {
       ]);
       expect(() => mockSupabase.from('posts').select().maybeSingle(),
           throwsException);
+    });
+  });
+
+  group('Referenced table queries', () {
+    setUp(() async {
+      // Insert data into the referenced table
+      await mockSupabase.from('authors').insert([
+        {'id': 1, 'name': 'Author One'},
+        {'id': 2, 'name': 'Author Two'}
+      ]);
+
+      // Insert data into the main table with references
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post', 'author_id': 1},
+        {'id': 2, 'title': 'Second post', 'author_id': 2}
+      ]);
+    });
+
+    test('Join with referenced table', () async {
+      // Test joining with the referenced table
+      final posts = await mockSupabase.from('posts').select('*, authors(*)');
+      expect(posts.length, 2);
+      expect(posts[0]['authors']['name'], 'Author One');
+      expect(posts[1]['authors']['name'], 'Author Two');
+    });
+
+    test('Filter by referenced table column', () async {
+      // Test filtering by a column in the referenced table
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, authors(*)')
+          .eq('authors.name', 'Author One');
+      expect(posts.length, 1);
+      expect(posts.first['title'], 'First post');
+    });
+
+    test('Order by referenced table column', () async {
+      // Test ordering by a column in the referenced table
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, authors(*)')
+          .order('authors.name', ascending: false);
+      expect(posts.length, 2);
+      expect(posts.first['authors']['name'], 'Author Two');
+    });
+
+    test('Limit with referenced table', () async {
+      // Test limiting results with referenced table
+      final posts =
+          await mockSupabase.from('posts').select('*, authors(*)').limit(1);
+      expect(posts.length, 1);
+    });
+
+    test('Range with referenced table', () async {
+      // Test range with referenced table
+      final posts =
+          await mockSupabase.from('posts').select('*, authors(*)').range(0, 0);
+      expect(posts.length, 1);
+      expect(posts.first['title'], 'First post');
     });
   });
 }

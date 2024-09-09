@@ -15,7 +15,11 @@ class MockSupabaseHttpClient extends BaseClient {
   @override
   Future<StreamedResponse> send(BaseRequest request) async {
     // Extract the table name from the URL
-    final tableName = _extractTableName(request.url);
+    final tableName = _extractTableName(
+      url: request.url,
+      headers: request.headers,
+      method: request.method,
+    );
 
     // Decode the request body if it's not a GET request
     final body = (request.method != 'GET' && request.method != 'DELETE') &&
@@ -45,12 +49,31 @@ class MockSupabaseHttpClient extends BaseClient {
     }
   }
 
-  String _extractTableName(Uri url) {
+  String _extractTableName({
+    required Uri url,
+    required Map<String, String> headers,
+    required String method,
+  }) {
     // Extract the table name from the URL
     final pathSegments = url.pathSegments;
     final restIndex = pathSegments.indexOf('v1');
     if (restIndex != -1 && restIndex < pathSegments.length - 1) {
-      return pathSegments[restIndex + 1];
+      final tableName = pathSegments[restIndex + 1];
+
+      // Extract custom schema from headers
+      String? customSchema;
+      if (method == 'GET' || method == 'HEAD') {
+        customSchema = headers['Accept-Profile'];
+      } else {
+        customSchema = headers['Content-Profile'];
+      }
+
+      // Prepend custom schema if present
+      if (customSchema != null && customSchema.isNotEmpty) {
+        return '$customSchema.$tableName';
+      }
+
+      return tableName;
     }
     throw Exception('Invalid URL format: unable to extract table name');
   }
@@ -199,7 +222,7 @@ class MockSupabaseHttpClient extends BaseClient {
       return _createResponse([], request: request);
     }
 
-    var result = List<Map<String, dynamic>>.from(_database[tableName]!);
+    var returningRows = List<Map<String, dynamic>>.from(_database[tableName]!);
 
     // Handle basic filtering
     queryParams.forEach((key, value) {
@@ -208,7 +231,7 @@ class MockSupabaseHttpClient extends BaseClient {
           key != 'limit' &&
           key != 'range') {
         final filter = _parseFilter(columnName: key, postrestFilter: value);
-        result = result.where((item) => filter(item)).toList();
+        returningRows = returningRows.where((item) => filter(item)).toList();
       }
     });
 
@@ -217,7 +240,7 @@ class MockSupabaseHttpClient extends BaseClient {
       final orderParams = queryParams['order']!.split('.');
       final field = orderParams[0];
       final ascending = orderParams.length == 1 || orderParams[1] != 'desc';
-      result.sort((a, b) => ascending
+      returningRows.sort((a, b) => ascending
           ? a[field].compareTo(b[field])
           : b[field].compareTo(a[field]));
     }
@@ -225,7 +248,7 @@ class MockSupabaseHttpClient extends BaseClient {
     // Handle limiting
     if (queryParams.containsKey('limit')) {
       final limit = int.parse(queryParams['limit']!);
-      result = result.take(limit).toList();
+      returningRows = returningRows.take(limit).toList();
     }
 
     // Handle range
@@ -233,34 +256,47 @@ class MockSupabaseHttpClient extends BaseClient {
       final rangeParams = queryParams['range']!.split('-');
       final start = int.parse(rangeParams[0]);
       final end = int.parse(rangeParams[1]);
-      result = result.sublist(start, end + 1);
+      returningRows = returningRows.sublist(start, end + 1);
+    }
+
+    // Handle column selection
+    if (queryParams.containsKey('select')) {
+      final selectedColumns = queryParams['select']!.split(',');
+      if (!selectedColumns.contains('*')) {
+        // Otherwise, filter the columns as before
+        returningRows = returningRows.map((row) {
+          return Map<String, dynamic>.fromEntries(row.entries
+              .where((entry) => selectedColumns.contains(entry.key)));
+        }).toList();
+      }
     }
 
     // Handle single
     if (request.headers['Accept'] == 'application/vnd.pgrst.object+json') {
-      if (result.length == 1) {
-        return _createResponse(result.first, request: request);
+      if (returningRows.length == 1) {
+        return _createResponse(returningRows.first, request: request);
       } else {
-        return _createResponse(
-            {'error': '${result.length} rows were found for single query'},
-            request: request);
+        return _createResponse({
+          'error': '${returningRows.length} rows were found for single query'
+        }, request: request);
       }
     }
 
     // Handle maybeSingle
     if (request.headers['Accept'] == 'application/json') {
-      if (result.isEmpty) {
+      if (returningRows.isEmpty) {
         return _createResponse(null, request: request);
-      } else if (result.length == 1) {
-        return _createResponse(result.first, request: request);
+      } else if (returningRows.length == 1) {
+        return _createResponse(returningRows.first, request: request);
       } else {
-        return _createResponse(
-            {'error': '${result.length} rows were found for maybeSingle query'},
-            statusCode: 405, request: request);
+        return _createResponse({
+          'error':
+              '${returningRows.length} rows were found for maybeSingle query'
+        }, statusCode: 405, request: request);
       }
     }
 
-    return _createResponse(result, request: request);
+    return _createResponse(returningRows, request: request);
   }
 
   bool Function(Map<String, dynamic> row) _parseFilter({
