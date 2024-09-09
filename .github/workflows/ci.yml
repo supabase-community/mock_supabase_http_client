@@ -13,11 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        sdk: [stable, beta, dev]
-
-    defaults:
-      run:
-        working-directory: packages/postgrest
 
     runs-on: ${{ matrix.os }}
 
@@ -28,7 +23,7 @@ jobs:
       - name: Setup Dart
         uses: dart-lang/setup-dart@v1
         with:
-          sdk: ${{ matrix.sdk }}
+          sdk: stable
 
       - name: Install dependencies
         run: dart pub get
