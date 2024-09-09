@@ -65,9 +65,22 @@ void main() {
 ## Limitations
 
 - The mock Supabase client does not support embedded resources (querying related tables).
+- The mock Supabase client does not know the table schema. This means that it does not know if the inserted mock data is a referenced table data, or just a array/JSON object.
+- Nested referenced table
+    ```dart
+    // This is fine
+    final posts = await mockSupabase.from('posts').select('*, authors(*)');
+    // This will not provide the correct data
+    final posts = await mockSupabase.from('posts').select('*, authors(*, comments(*))');
+    ```
+- Inner joins
 - Renaming column names
 - count and head requests
 - aggregate functions
+- Respect nullsFirst on ordering
+- rpc support
+- Multiple order by fields
+- This library does not match all the exceptions thrown by an actual Supabase client.
 - The mock Supabase client does not support auth, realtime, storage, or calling edge functions.
     - You can either mock those using libraries like [mockito](https://pub.dev/packages/mockito) or use the Supabase CLI to do a full integration testing. You could use our [GitHub actions](https://github.com/supabase/setup-cli) to do that.
 

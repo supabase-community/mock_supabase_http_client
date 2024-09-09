@@ -519,11 +519,14 @@ void main() {
     test('Range', () async {
       await mockSupabase.from('posts').insert([
         {'id': 1, 'title': 'First post'},
-        {'id': 2, 'title': 'Second post'}
+        {'id': 2, 'title': 'Second post'},
+        {'id': 3, 'title': 'Third post'},
+        {'id': 4, 'title': 'Fourth post'},
       ]);
-      final posts = await mockSupabase.from('posts').select().range(0, 0);
-      expect(posts.length, 1);
-      expect(posts.first, {'id': 1, 'title': 'First post'});
+      final posts = await mockSupabase.from('posts').select().range(1, 2);
+      expect(posts.length, 2);
+      expect(posts.first, {'id': 2, 'title': 'Second post'});
+      expect(posts.last, {'id': 3, 'title': 'Third post'});
     });
     test('Single', () async {
       await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
@@ -554,22 +557,37 @@ void main() {
 
   group('Referenced table queries', () {
     setUp(() async {
-      // Insert data into the referenced table
-      await mockSupabase.from('authors').insert([
-        {'id': 1, 'name': 'Author One'},
-        {'id': 2, 'name': 'Author Two'}
-      ]);
-
-      // Insert data into the main table with references
+      // posts table has a many-to-one relationship with authors table
+      // posts table has a one-to-many relationship with comments table
       await mockSupabase.from('posts').insert([
-        {'id': 1, 'title': 'First post', 'author_id': 1},
-        {'id': 2, 'title': 'Second post', 'author_id': 2}
+        {
+          'id': 1,
+          'title': 'First post',
+          'authors': {'id': 1, 'name': 'Author One'},
+          'comments': [
+            {'id': 1, 'content': 'First comment'},
+            {'id': 2, 'content': 'Second comment'}
+          ]
+        },
+        {
+          'id': 2,
+          'title': 'Second post',
+          'authors': {'id': 2, 'name': 'Author Two'},
+          'comments': [
+            {'id': 3, 'content': 'Third comment'},
+            {'id': 4, 'content': 'Fourth comment'},
+            {'id': 5, 'content': 'Fifth comment'}
+          ]
+        }
       ]);
     });
 
     test('Join with referenced table', () async {
       // Test joining with the referenced table
-      final posts = await mockSupabase.from('posts').select('*, authors(*)');
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, authors(*)')
+          .order('id', ascending: true);
       expect(posts.length, 2);
       expect(posts[0]['authors']['name'], 'Author One');
       expect(posts[1]['authors']['name'], 'Author Two');
@@ -580,19 +598,23 @@ void main() {
       final posts = await mockSupabase
           .from('posts')
           .select('*, authors(*)')
-          .eq('authors.name', 'Author One');
-      expect(posts.length, 1);
+          .eq('authors.name', 'Author One')
+          .order('id', ascending: true);
+      print(posts);
+      expect(posts.length, 2);
       expect(posts.first['title'], 'First post');
+      expect(posts.first['authors'], {'id': 1, 'name': 'Author One'});
+      expect(posts.last['authors'], null);
     });
 
     test('Order by referenced table column', () async {
       // Test ordering by a column in the referenced table
       final posts = await mockSupabase
           .from('posts')
-          .select('*, authors(*)')
-          .order('authors.name', ascending: false);
+          .select('*, comments(*)')
+          .order('comments.id', ascending: false);
       expect(posts.length, 2);
-      expect(posts.first['authors']['name'], 'Author Two');
+      expect(posts.first['comments'].first['id'], 2);
     });
 
     test('Limit with referenced table', () async {
@@ -602,12 +624,27 @@ void main() {
       expect(posts.length, 1);
     });
 
+    test('Limit on the referenced table', () async {
+      // Test limiting results with referenced table
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, comments(*)')
+          .limit(1, referencedTable: 'comments');
+      expect(posts.first['comments'].length, 1);
+      expect(posts[1]['comments'].length, 1);
+    });
+
     test('Range with referenced table', () async {
       // Test range with referenced table
-      final posts =
-          await mockSupabase.from('posts').select('*, authors(*)').range(0, 0);
-      expect(posts.length, 1);
-      expect(posts.first['title'], 'First post');
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, authors(*)')
+          .order('comments.id', ascending: true)
+          .range(1, 2, referencedTable: 'comments');
+      expect(posts.length, 2);
+      expect(posts[0]['comments'].length, 1);
+      expect(posts[1]['comments'].length, 2);
+      expect(posts[1]['comments'].first['content'], 'Fourth comment');
     });
   });
 }

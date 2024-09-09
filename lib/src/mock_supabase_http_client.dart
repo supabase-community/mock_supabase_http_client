@@ -153,7 +153,10 @@ class MockSupabaseHttpClient extends BaseClient {
     // Check if an item matches the provided filters
     for (var columnName in filters.keys) {
       final filter = _parseFilter(
-          columnName: columnName, postrestFilter: filters[columnName]!);
+        columnName: columnName,
+        postrestFilter: filters[columnName]!,
+        targetRow: row,
+      );
       if (!filter(row)) {
         return false;
       }
@@ -230,41 +233,178 @@ class MockSupabaseHttpClient extends BaseClient {
           key != 'order' &&
           key != 'limit' &&
           key != 'range') {
-        final filter = _parseFilter(columnName: key, postrestFilter: value);
-        returningRows = returningRows.where((item) => filter(item)).toList();
+        if (key.contains('.')) {
+          // referenced table filtering
+          final parts = key.split('.');
+          final referencedTableName = parts[0];
+          final referencedColumnName = parts[1];
+          final filter = _parseFilter(
+            columnName: referencedColumnName,
+            postrestFilter: value,
+            targetRow: returningRows.first[referencedTableName] is List
+                ? returningRows.first[referencedTableName].first
+                : returningRows.first[referencedTableName],
+          );
+          // apply the filter to the target column of the returning rows
+          returningRows = returningRows.map((row) {
+            if (row.containsKey(referencedTableName)) {
+              if (row[referencedTableName] is List) {
+                row[referencedTableName] = (row[referencedTableName] as List)
+                    .where((item) => filter(item))
+                    .toList();
+              } else if (row[referencedTableName] is Map) {
+                final filterResult = filter(row[referencedTableName]);
+                print(filterResult);
+                row[referencedTableName] = filter(row[referencedTableName])
+                    ? row[referencedTableName]
+                    : null;
+                print(row);
+              } else {
+                throw Exception(
+                    'Invalid type ${row[referencedTableName].runtimeType} found');
+              }
+            } else {
+              throw Exception(
+                  'Invalid query: referenced table $referencedTableName not found');
+            }
+            return row;
+          }).toList();
+        } else if (key.contains('!inner')) {
+          // referenced table filtering with !inner
+          final referencedTableName = key.split('!inner')[0];
+          final referencedColumnName = key.split('!inner')[1];
+          final filter = _parseFilter(
+            columnName: referencedColumnName,
+            postrestFilter: value,
+            targetRow: returningRows.first[referencedTableName],
+          );
+        } else {
+          // Regular filtering on the top level table
+          final filter = _parseFilter(
+            columnName: key,
+            postrestFilter: value,
+            targetRow: returningRows.first,
+          );
+          returningRows = returningRows.where((item) => filter(item)).toList();
+        }
       }
     });
 
-    // Handle ordering
+    // Handle top level table ordering
     if (queryParams.containsKey('order')) {
       final orderParams = queryParams['order']!.split('.');
-      final field = orderParams[0];
+
+      // Handle top-level table ordering
       final ascending = orderParams.length == 1 || orderParams[1] != 'desc';
+
+      final field = orderParams[0];
       returningRows.sort((a, b) => ascending
           ? a[field].compareTo(b[field])
           : b[field].compareTo(a[field]));
     }
 
-    // Handle limiting
+    // Handle referenced table ordering
+    queryParams.keys.where((key) => key.contains('.order')).forEach((key) {
+      final referencedTable = key.split('.')[0];
+      final orderParams = queryParams[key]!.split('.');
+      final ascending = orderParams.length == 1 || orderParams[1] != 'desc';
+      final field = orderParams[0];
+      returningRows = returningRows.map((row) {
+        if (row.containsKey(referencedTable)) {
+          if (row[referencedTable] is List) {
+            return {
+              ...row,
+              referencedTable: (row[referencedTable] as List).sort((a, b) =>
+                  ascending
+                      ? a[field].compareTo(b[field])
+                      : b[field].compareTo(a[field]))
+            };
+          }
+        }
+        return row;
+      }).toList();
+    });
+
+    // Handle top level table offset
+    if (queryParams.containsKey('offset')) {
+      final offset = int.parse(queryParams['offset']!);
+      returningRows = returningRows.skip(offset).toList();
+    }
+
+    // Handle referenced table offset
+    queryParams.keys.where((key) => key.contains('.offset')).forEach((key) {
+      // Handle limiting on a referenced table
+      final referencedTable = key.split('.')[0];
+      final offset = int.parse(queryParams[key]!);
+      returningRows = returningRows.map((row) {
+        if (row[referencedTable] is List) {
+          return {
+            ...row,
+            referencedTable:
+                (row[referencedTable] as List).skip(offset).toList()
+          };
+        }
+        return row;
+      }).toList();
+    });
+
+    // Handle top level table limiting
     if (queryParams.containsKey('limit')) {
       final limit = int.parse(queryParams['limit']!);
       returningRows = returningRows.take(limit).toList();
     }
 
-    // Handle range
-    if (queryParams.containsKey('range')) {
-      final rangeParams = queryParams['range']!.split('-');
-      final start = int.parse(rangeParams[0]);
-      final end = int.parse(rangeParams[1]);
-      returningRows = returningRows.sublist(start, end + 1);
-    }
+    // Handle limiting on a referenced table
+    queryParams.keys.where((key) => key.contains('.limit')).forEach((key) {
+      // Handle limiting on a referenced table
+      final referencedTable = key.split('.')[0];
+      final limit = int.parse(queryParams[key]!);
+      returningRows = returningRows.map((row) {
+        if (row[referencedTable] is List) {
+          return {
+            ...row,
+            referencedTable: (row[referencedTable] as List).take(limit).toList()
+          };
+        }
+        return row;
+      }).toList();
+    });
 
-    // Handle column selection
+    // Handle column selection and referenced table selection
     if (queryParams.containsKey('select')) {
       final selectedColumns = queryParams['select']!.split(',');
+
+      // Handle referenced table selection
+      for (var column in selectedColumns) {
+        if (column.contains('(')) {
+          final referencedTableName = column.split('(')[0];
+          final referencedColumns =
+              column.split('(')[1].split(')')[0].split(',');
+
+          returningRows = returningRows.map((row) {
+            if (row.containsKey(referencedTableName)) {
+              if (referencedColumns.contains('*')) {
+                // Return all columns for the referenced table
+                return row;
+              } else {
+                // Filter columns for the referenced table
+                var filteredReferencedTable = Map<String, dynamic>.fromEntries(
+                    (row[referencedTableName] as Map<String, dynamic>)
+                        .entries
+                        .where(
+                            (entry) => referencedColumns.contains(entry.key)));
+                return {...row, referencedTableName: filteredReferencedTable};
+              }
+            }
+            return row;
+          }).toList();
+        }
+      }
+
+      // Handle top level column selection
       if (!selectedColumns.contains('*')) {
-        // Otherwise, filter the columns as before
         returningRows = returningRows.map((row) {
+          print(row);
           return Map<String, dynamic>.fromEntries(row.entries
               .where((entry) => selectedColumns.contains(entry.key)));
         }).toList();
@@ -302,6 +442,7 @@ class MockSupabaseHttpClient extends BaseClient {
   bool Function(Map<String, dynamic> row) _parseFilter({
     required String columnName,
     required String postrestFilter,
+    required Map<String, dynamic> targetRow,
   }) {
     // Parse filters from query parameters
     if (columnName == 'or') {
@@ -314,7 +455,9 @@ class MockSupabaseHttpClient extends BaseClient {
           final operator = parts[1];
           final value = parts.sublist(2).join('.');
           final subFilter = _parseFilter(
-              columnName: subColumnName, postrestFilter: '$operator.$value');
+              columnName: subColumnName,
+              postrestFilter: '$operator.$value',
+              targetRow: row);
           return subFilter(row);
         });
       };
@@ -386,7 +529,10 @@ class MockSupabaseHttpClient extends BaseClient {
       final operator = parts[1];
       final value = parts.sublist(2).join('.');
       final filter = _parseFilter(
-          columnName: columnName, postrestFilter: '$operator.$value');
+        columnName: columnName,
+        postrestFilter: '$operator.$value',
+        targetRow: targetRow,
+      );
       return (row) => !filter(row);
     }
     return (row) => true;
