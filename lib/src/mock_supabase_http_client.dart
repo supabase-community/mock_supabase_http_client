@@ -278,6 +278,7 @@ class MockSupabaseHttpClient extends BaseClient {
             postrestFilter: value,
             targetRow: returningRows.first[referencedTableName],
           );
+          // TODO: Implement !inner filtering
         } else {
           // Regular filtering on the top level table
           final filter = _parseFilter(
