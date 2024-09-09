@@ -305,13 +305,11 @@ class MockSupabaseHttpClient extends BaseClient {
       returningRows = returningRows.map((row) {
         if (row.containsKey(referencedTable)) {
           if (row[referencedTable] is List) {
-            return {
-              ...row,
-              referencedTable: (row[referencedTable] as List).sort((a, b) =>
-                  ascending
-                      ? a[field].compareTo(b[field])
-                      : b[field].compareTo(a[field]))
-            };
+            final referencedTableRows = (row[referencedTable] as List);
+            referencedTableRows.sort((a, b) => ascending
+                ? a[field].compareTo(b[field])
+                : b[field].compareTo(a[field]));
+            return {...row, referencedTable: referencedTableRows};
           }
         }
         return row;
