@@ -271,14 +271,6 @@ class MockSupabaseHttpClient extends BaseClient {
           }).toList();
         } else if (key.contains('!inner')) {
           // referenced table filtering with !inner
-          final referencedTableName = key.split('!inner')[0];
-          final referencedColumnName = key.split('!inner')[1];
-          final filter = _parseFilter(
-            columnName: referencedColumnName,
-            postrestFilter: value,
-            targetRow: returningRows.first[referencedTableName],
-          );
-          // TODO: Implement !inner filtering
         } else {
           // Regular filtering on the top level table
           final filter = _parseFilter(
