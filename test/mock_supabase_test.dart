@@ -647,4 +647,20 @@ void main() {
       expect(posts[1]['comments'].first['content'], 'Fourth comment');
     });
   });
+
+  group('non-ASCII characters tests', () {
+    test('Insert Japanese text', () async {
+      await mockSupabase.from('posts').insert({'title': 'こんにちは'});
+      final posts = await mockSupabase.from('posts').select();
+      expect(posts.length, 1);
+      expect(posts.first, {'title': 'こんにちは'});
+    });
+
+    test('Insert emoji', () async {
+      await mockSupabase.from('posts').insert({'title': '😀'});
+      final posts = await mockSupabase.from('posts').select();
+      expect(posts.length, 1);
+      expect(posts.first, {'title': '😀'});
+    });
+  });
 }
