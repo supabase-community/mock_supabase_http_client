@@ -535,7 +535,7 @@ class MockSupabaseHttpClient extends BaseClient {
     return StreamedResponse(
       Stream.value(utf8.encode(jsonEncode(data))),
       statusCode,
-      headers: {'content-type': 'application/json'},
+      headers: {'content-type': 'application/json; charset=utf-8'},
       request: request,
     );
   }
