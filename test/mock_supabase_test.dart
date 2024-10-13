@@ -648,6 +648,61 @@ void main() {
     });
   });
 
+  group('count', () {
+    test('count', () async {
+      await mockSupabase.from('posts').insert([
+        {'title': 'First post'},
+        {'title': 'Second post'}
+      ]);
+      final count = await mockSupabase.from('posts').count();
+      final some = await mockSupabase.from('posts').select().count();
+      expect(count, 2);
+    });
+
+    test('count with data', () async {
+      await mockSupabase.from('posts').insert([
+        {'title': 'First post'},
+        {'title': 'Second post'}
+      ]);
+      final response = await mockSupabase.from('posts').select().count();
+      expect(response.data.length, 2);
+      expect(response.data.first['title'], 'First post');
+      expect(response.count, 2);
+    });
+
+    test('count with filter', () async {
+      await mockSupabase.from('posts').insert([
+        {'title': 'First post'},
+        {'title': 'Second post'}
+      ]);
+      final response = await mockSupabase
+          .from('posts')
+          .select()
+          .eq('title', 'First post')
+          .count();
+      expect(response.data.length, 1);
+      expect(response.data.first['title'], 'First post');
+      expect(response.count, 1);
+    });
+
+    test('count with filter and modifier', () async {
+      await mockSupabase.from('posts').insert([
+        {'title': 'First post', 'author_id': 1},
+        {'title': 'Second post', 'author_id': 2},
+        {'title': 'Third post', 'author_id': 1}
+      ]);
+      final response = await mockSupabase
+          .from('posts')
+          .select()
+          .eq('author_id', 1)
+          .limit(1)
+          .count();
+      expect(response.data.length, 1);
+      expect(response.data.first['title'], 'First post');
+      expect(response.count, 2);
+    });
+  });
+
   group('non-ASCII characters tests', () {
     test('Insert Japanese text', () async {
       await mockSupabase.from('posts').insert({'title': 'こんにちは'});
