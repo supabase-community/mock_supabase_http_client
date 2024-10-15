@@ -22,7 +22,9 @@ class MockSupabaseHttpClient extends BaseClient {
     );
 
     // Decode the request body if it's not a GET request
-    final body = (request.method != 'GET' && request.method != 'DELETE') &&
+    final body = (request.method != 'GET' &&
+                request.method != 'DELETE' &&
+                request.method != 'HEAD') &&
             request is Request
         ? jsonDecode(await request.finalize().transform(utf8.decoder).join())
         : null;
@@ -43,6 +45,8 @@ class MockSupabaseHttpClient extends BaseClient {
         return _handleDelete(tableName, body, request);
       case 'GET':
         return _handleSelect(tableName, request.url.queryParameters, request);
+      case 'HEAD':
+        return _handleHead(tableName, request.url.queryParameters, request);
       default:
         return _createResponse({'error': 'Method not allowed'},
             statusCode: 405, request: request);
@@ -219,7 +223,10 @@ class MockSupabaseHttpClient extends BaseClient {
   }
 
   StreamedResponse _handleSelect(
-      String tableName, Map<String, String> queryParams, BaseRequest request) {
+    String tableName,
+    Map<String, String> queryParams,
+    BaseRequest request,
+  ) {
     // Handle selecting data from the mock database
     if (!_database.containsKey(tableName)) {
       return _createResponse([], request: request);
@@ -283,6 +290,9 @@ class MockSupabaseHttpClient extends BaseClient {
       }
     });
 
+    // Get the count value before any limiting
+    final countValue = returningRows.length;
+
     // Handle top level table ordering
     if (queryParams.containsKey('order')) {
       final orderParams = queryParams['order']!.split('.');
@@ -316,9 +326,12 @@ class MockSupabaseHttpClient extends BaseClient {
       }).toList();
     });
 
+    final offset = queryParams.containsKey('offset')
+        ? int.parse(queryParams['offset']!)
+        : 0;
+
     // Handle top level table offset
-    if (queryParams.containsKey('offset')) {
-      final offset = int.parse(queryParams['offset']!);
+    if (offset > 0) {
       returningRows = returningRows.skip(offset).toList();
     }
 
@@ -395,11 +408,26 @@ class MockSupabaseHttpClient extends BaseClient {
       // Handle top level column selection
       if (!selectedColumns.contains('*')) {
         returningRows = returningRows.map((row) {
-          print(row);
           return Map<String, dynamic>.fromEntries(row.entries
               .where((entry) => selectedColumns.contains(entry.key)));
         }).toList();
       }
+    }
+
+    // Handle count
+    final preferHeader = request.headers['Prefer'];
+    final isCountRequest =
+        preferHeader != null && preferHeader.contains('count=');
+
+    if (isCountRequest) {
+      final countType =
+          preferHeader.contains('count=exact') ? 'exact' : 'planned';
+
+      return _createResponse(returningRows, request: request, headers: {
+        'content-range': '$offset-${offset + returningRows.length}/$countValue',
+        'content-profile': tableName,
+        'preference-applied': 'count=$countType'
+      });
     }
 
     // Handle single
@@ -428,6 +456,61 @@ class MockSupabaseHttpClient extends BaseClient {
     }
 
     return _createResponse(returningRows, request: request);
+  }
+
+  StreamedResponse _handleHead(
+      String tableName, Map<String, String> queryParams, BaseRequest request) {
+    // Perform the same filtering as in _handleSelect
+    var returningRows =
+        List<Map<String, dynamic>>.from(_database[tableName] ?? []);
+
+    // Apply filters (you may want to extract this to a separate method)
+    queryParams.forEach((key, value) {
+      if (key != 'select' &&
+          key != 'order' &&
+          key != 'limit' &&
+          key != 'range') {
+        final filter = _parseFilter(
+          columnName: key,
+          postrestFilter: value,
+          targetRow: returningRows.isNotEmpty ? returningRows.first : {},
+        );
+        returningRows = returningRows.where((item) => filter(item)).toList();
+      }
+    });
+
+    // Handle count
+    final preferHeader = request.headers['Prefer'];
+    final isCountRequest =
+        preferHeader != null && preferHeader.contains('count=');
+
+    if (isCountRequest) {
+      final count = returningRows.length;
+      final countType =
+          preferHeader.contains('count=exact') ? 'exact' : 'planned';
+
+      // Return only headers for HEAD request
+      return StreamedResponse(
+        Stream.value([]), // Empty body for HEAD request
+        200,
+        headers: {
+          'content-range': '0-$count/$count',
+          'content-profile': tableName,
+          'preference-applied': 'count=$countType'
+        },
+        request: request,
+      );
+    }
+
+    // If it's not a count request, return basic headers
+    return StreamedResponse(
+      Stream.value([]), // Empty body for HEAD request
+      200,
+      headers: {
+        'content-profile': tableName,
+      },
+      request: request,
+    );
   }
 
   bool Function(Map<String, dynamic> row) _parseFilter({
@@ -530,12 +613,18 @@ class MockSupabaseHttpClient extends BaseClient {
   }
 
   StreamedResponse _createResponse(dynamic data,
-      {int statusCode = 200, required BaseRequest request}) {
-    // Create a response for the mock client
+      {int statusCode = 200,
+      required BaseRequest request,
+      Map<String, String>? headers}) {
+    final responseHeaders = {
+      'content-type': 'application/json; charset=utf-8',
+      ...?headers,
+    };
+
     return StreamedResponse(
       Stream.value(utf8.encode(jsonEncode(data))),
       statusCode,
-      headers: {'content-type': 'application/json; charset=utf-8'},
+      headers: responseHeaders,
       request: request,
     );
   }
