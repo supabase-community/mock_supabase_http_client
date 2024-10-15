@@ -1,3 +1,7 @@
+## 0.0.3
+
+- feat: Add support for count and select with count. [#6](https://github.com/supabase-community/mock_supabase_http_client/pull/6)
+
 ## 0.0.2
 
 - fix: Character encoding issues in mock response to handle non-ASCII characters correctly [#3](https://github.com/supabase-community/mock_supabase_http_client/pull/3)
@@ -10,4 +14,3 @@
 - Basic filtering support.
 - Basic transformer (order, limit, range, single, maybeSingle) support.
 - Basic referenced table support.
-
