@@ -503,6 +503,17 @@ void main() {
       expect(posts.length, 1);
     });
 
+    test('limit with a filter', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post', 'author_id': 1},
+        {'id': 2, 'title': 'Second post', 'author_id': 2},
+        {'id': 3, 'title': 'Third post', 'author_id': 1}
+      ]);
+      final posts =
+          await mockSupabase.from('posts').select().eq('author_id', 1).limit(1);
+      expect(posts.length, 1);
+    });
+
     test('Order', () async {
       await mockSupabase.from('posts').insert([
         {'id': 1, 'title': 'First post'},
@@ -654,8 +665,8 @@ void main() {
         {'title': 'First post'},
         {'title': 'Second post'}
       ]);
+
       final count = await mockSupabase.from('posts').count();
-      final some = await mockSupabase.from('posts').select().count();
       expect(count, 2);
     });
 
@@ -672,17 +683,25 @@ void main() {
 
     test('count with filter', () async {
       await mockSupabase.from('posts').insert([
-        {'title': 'First post'},
-        {'title': 'Second post'}
+        {'title': 'First post', 'author_id': 1},
+        {'title': 'Second post', 'author_id': 2},
+        {'title': 'Third post', 'author_id': 1}
       ]);
-      final response = await mockSupabase
-          .from('posts')
-          .select()
-          .eq('title', 'First post')
-          .count();
-      expect(response.data.length, 1);
+      final count = await mockSupabase.from('posts').count().eq('author_id', 1);
+      expect(count, 2);
+    });
+
+    test('count with data and filter', () async {
+      await mockSupabase.from('posts').insert([
+        {'title': 'First post', 'author_id': 1},
+        {'title': 'Second post', 'author_id': 2},
+        {'title': 'Third post', 'author_id': 1}
+      ]);
+      final response =
+          await mockSupabase.from('posts').select().eq('author_id', 1).count();
+      expect(response.data.length, 2);
       expect(response.data.first['title'], 'First post');
-      expect(response.count, 1);
+      expect(response.count, 2);
     });
 
     test('count with filter and modifier', () async {
