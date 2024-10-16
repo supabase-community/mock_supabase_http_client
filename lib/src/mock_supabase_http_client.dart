@@ -543,7 +543,19 @@ class MockSupabaseHttpClient extends BaseClient {
       return (row) => row[columnName].toString() != value;
     } else if (postrestFilter.startsWith('gt.')) {
       final value = postrestFilter.substring(3);
-      return (row) => row[columnName] > num.tryParse(value);
+
+      if (DateTime.tryParse(value) != null) {
+        final dateTime = DateTime.parse(value);
+
+        return (row) {
+          final rowDate = DateTime.tryParse(row[columnName].toString());
+          return rowDate != null && rowDate.isAfter(dateTime);
+        };
+      } else if (num.tryParse(value) != null) {
+        return (row) => row[columnName] > num.tryParse(value);
+      } else {
+        throw UnimplementedError('Unsupported value type');
+      }
     } else if (postrestFilter.startsWith('lt.')) {
       final value = postrestFilter.substring(3);
       return (row) => row[columnName] < num.tryParse(value);

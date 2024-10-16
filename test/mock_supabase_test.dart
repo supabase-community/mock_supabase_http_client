@@ -691,6 +691,32 @@ void main() {
       expect(count, 2);
     });
 
+    test('count with gt filter with datetime format', () async {
+      await mockSupabase.from('data').insert([
+        {
+          'title': 'First post',
+          'author_id': 1,
+          'createdAt': '2021-08-01 11:26:15.307+00'
+        },
+        {
+          'title': 'Second post',
+          'author_id': 2,
+          'createdAt': '2021-08-02 11:26:15.307+00'
+        },
+        {
+          'title': 'Third post',
+          'author_id': 1,
+          'createdAt': '2021-08-03 11:26:15.307+00'
+        }
+      ]);
+      final count = await mockSupabase
+          .from('data')
+          .count()
+          .gt('createdAt', '2021-08-02 10:26:15.307+00');
+
+      expect(count, 2);
+    });
+
     test('count with data and filter', () async {
       await mockSupabase.from('posts').insert([
         {'title': 'First post', 'author_id': 1},
