@@ -707,17 +707,22 @@ void main() {
           'title': 'Third post',
           'author_id': 1,
           'createdAt': '2021-08-03 11:26:15.307+00'
+        },
+        {
+          'title': 'Fourth post',
+          'author_id': 2,
+          'createdAt': '2021-08-04 11:26:15.307+00'
         }
       ]);
       final count = await mockSupabase
           .from('data')
           .count()
-          .gt('createdAt', '2021-08-02 10:26:15.307+00');
+          .gt('createdAt', '2021-08-02 11:26:15.307+00');
 
       expect(count, 2);
     });
 
-    test('count with gte. filter with datetime format', () async {
+    test('count with gte filter with datetime format', () async {
       await mockSupabase.from('data').insert([
         {
           'title': 'First post',
@@ -733,6 +738,11 @@ void main() {
           'title': 'Third post',
           'author_id': 1,
           'createdAt': '2021-08-03 11:26:15.307+00'
+        },
+        {
+          'title': 'Fourth post',
+          'author_id': 2,
+          'createdAt': '2021-08-04 11:26:15.307+00'
         }
       ]);
 
@@ -741,7 +751,7 @@ void main() {
           .count()
           .gte('createdAt', '2021-08-02 11:26:15.307+00');
 
-      expect(count, 2);
+      expect(count, 3);
     });
 
     test('count with lt filter with datetime format', () async {
@@ -760,17 +770,22 @@ void main() {
           'title': 'Third post',
           'author_id': 1,
           'createdAt': '2021-08-03 11:26:15.307+00'
+        },
+        {
+          'title': 'Fourth post',
+          'author_id': 2,
+          'createdAt': '2021-08-04 11:26:15.307+00'
         }
       ]);
       final count = await mockSupabase
           .from('data')
           .count()
-          .lt('createdAt', '2021-08-02 12:26:15.307+00');
+          .lt('createdAt', '2021-08-03 11:26:15.307+00');
 
       expect(count, 2);
     });
 
-    test('count with lte. filter with datetime format', () async {
+    test('count with lte filter with datetime format', () async {
       await mockSupabase.from('data').insert([
         {
           'title': 'First post',
@@ -786,15 +801,20 @@ void main() {
           'title': 'Third post',
           'author_id': 1,
           'createdAt': '2021-08-03 11:26:15.307+00'
+        },
+        {
+          'title': 'Fourth post',
+          'author_id': 2,
+          'createdAt': '2021-08-04 11:26:15.307+00'
         }
       ]);
 
       final count = await mockSupabase
           .from('data')
           .count()
-          .lte('createdAt', '2021-08-02 11:26:15.307+00');
+          .lte('createdAt', '2021-08-03 11:26:15.307+00');
 
-      expect(count, 2);
+      expect(count, 3);
     });
 
     test('count with data and filter', () async {

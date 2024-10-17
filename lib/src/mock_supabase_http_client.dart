@@ -542,69 +542,29 @@ class MockSupabaseHttpClient extends BaseClient {
       final value = postrestFilter.substring(4);
       return (row) => row[columnName].toString() != value;
     } else if (postrestFilter.startsWith('gt.')) {
-      final value = postrestFilter.substring(3);
-
-      if (DateTime.tryParse(value) != null) {
-        final dateTime = DateTime.parse(value);
-
-        return (row) {
-          final rowDate = DateTime.tryParse(row[columnName].toString());
-          return rowDate != null && rowDate.isAfter(dateTime);
-        };
-      } else if (num.tryParse(value) != null) {
-        return (row) => row[columnName] > num.tryParse(value);
-      } else {
-        throw UnimplementedError('Unsupported value type');
-      }
+      return _handleComparison(
+        operator: 'gt',
+        value: postrestFilter.substring(3),
+        columnName: columnName,
+      );
     } else if (postrestFilter.startsWith('lt.')) {
-      final value = postrestFilter.substring(3);
-
-      if (DateTime.tryParse(value) != null) {
-        final dateTime = DateTime.parse(value);
-
-        return (row) {
-          final rowDate = DateTime.tryParse(row[columnName].toString());
-          return rowDate != null && rowDate.isBefore(dateTime);
-        };
-      } else if (num.tryParse(value) != null) {
-        return (row) => row[columnName] < num.tryParse(value);
-      } else {
-        throw UnimplementedError('Unsupported value type');
-      }
+      return _handleComparison(
+        operator: 'lt',
+        value: postrestFilter.substring(3),
+        columnName: columnName,
+      );
     } else if (postrestFilter.startsWith('gte.')) {
-      final value = postrestFilter.substring(4);
-
-      if (DateTime.tryParse(value) != null) {
-        final dateTime = DateTime.parse(value);
-
-        return (row) {
-          final rowDate = DateTime.tryParse(row[columnName].toString());
-          if (rowDate == null) return false;
-          return rowDate.isAtSameMomentAs(dateTime) ||
-              rowDate.isAfter(dateTime);
-        };
-      } else if (num.tryParse(value) != null) {
-        return (row) => row[columnName] >= num.tryParse(value);
-      } else {
-        throw UnimplementedError('Unsupported value type');
-      }
+      return _handleComparison(
+        operator: 'gte',
+        value: postrestFilter.substring(4),
+        columnName: columnName,
+      );
     } else if (postrestFilter.startsWith('lte.')) {
-      final value = postrestFilter.substring(4);
-
-      if (DateTime.tryParse(value) != null) {
-        final dateTime = DateTime.parse(value);
-
-        return (row) {
-          final rowDate = DateTime.tryParse(row[columnName].toString());
-          if (rowDate == null) return false;
-          return rowDate.isAtSameMomentAs(dateTime) ||
-              rowDate.isBefore(dateTime);
-        };
-      } else if (num.tryParse(value) != null) {
-        return (row) => row[columnName] <= num.tryParse(value);
-      } else {
-        throw UnimplementedError('Unsupported value type');
-      }
+      return _handleComparison(
+        operator: 'lte',
+        value: postrestFilter.substring(4),
+        columnName: columnName,
+      );
     } else if (postrestFilter.startsWith('like.')) {
       final value = postrestFilter.substring(5);
       final regex = RegExp(value.replaceAll('%', '.*'));
@@ -662,6 +622,72 @@ class MockSupabaseHttpClient extends BaseClient {
       return (row) => !filter(row);
     }
     return (row) => true;
+  }
+
+  /// Handles comparison operations for date and numeric values.
+  ///
+  /// This function creates a filter based on the given comparison [operator],
+  /// [value], and [columnName]. It supports both date and numeric comparisons.
+  ///
+  /// [operator] can be 'gt', 'lt', 'gte', or 'lte'.
+  /// [value] is the string representation of the value to compare against.
+  /// [columnName] is the name of the column to compare in each row.
+  ///
+  /// Returns a function that takes a row and returns a boolean indicating
+  /// whether the row matches the comparison criteria.
+  bool Function(Map<String, dynamic> row) _handleComparison({
+    required String operator,
+    required String value,
+    required String columnName,
+  }) {
+    // Check if the value is a valid date
+    if (DateTime.tryParse(value) != null) {
+      final dateTime = DateTime.parse(value);
+      return (row) {
+        final rowDate = DateTime.tryParse(row[columnName].toString());
+        if (rowDate == null) return false;
+        // Perform date comparison based on the operator
+        switch (operator) {
+          case 'gt':
+            return rowDate.isAfter(dateTime);
+          case 'lt':
+            return rowDate.isBefore(dateTime);
+          case 'gte':
+            return rowDate.isAtSameMomentAs(dateTime) ||
+                rowDate.isAfter(dateTime);
+          case 'lte':
+            return rowDate.isAtSameMomentAs(dateTime) ||
+                rowDate.isBefore(dateTime);
+          default:
+            throw UnimplementedError('Unsupported operator: $operator');
+        }
+      };
+    }
+    // Check if the value is a valid number
+    else if (num.tryParse(value) != null) {
+      final numValue = num.parse(value);
+      return (row) {
+        final rowValue = num.tryParse(row[columnName].toString());
+        if (rowValue == null) return false;
+        // Perform numeric comparison based on the operator
+        switch (operator) {
+          case 'gt':
+            return rowValue > numValue;
+          case 'lt':
+            return rowValue < numValue;
+          case 'gte':
+            return rowValue >= numValue;
+          case 'lte':
+            return rowValue <= numValue;
+          default:
+            throw UnimplementedError('Unsupported operator: $operator');
+        }
+      };
+    }
+    // Throw an error if the value is neither a date nor a number
+    else {
+      throw UnimplementedError('Unsupported value type');
+    }
   }
 
   StreamedResponse _createResponse(dynamic data,
