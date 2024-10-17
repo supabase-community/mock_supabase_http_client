@@ -1,3 +1,7 @@
+## 0.0.3+1
+
+- fix: Add support to datetime on gt. gte. lt. lte. filter [#8](https://github.com/supabase-community/mock_supabase_http_client/pull/8)
+
 ## 0.0.3
 
 - feat: Add support for count and select with count. [#6](https://github.com/supabase-community/mock_supabase_http_client/pull/6)
