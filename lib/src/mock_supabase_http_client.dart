@@ -2,55 +2,96 @@ import 'dart:convert';
 
 import 'package:http/http.dart';
 
+import 'mock_supabase_database.dart';
+
 class MockSupabaseHttpClient extends BaseClient {
   final Map<String, List<Map<String, dynamic>>> _database = {};
+  final Map<
+          String,
+          dynamic Function(
+              MockSupabaseDatabase database, Map<String, dynamic>? params)>
+      _rpcFunctions = {};
 
   MockSupabaseHttpClient();
 
   void reset() {
-    // Clear the mock database
+    // Clear the mock database and RPC functions
     _database.clear();
+    _rpcFunctions.clear();
+  }
+
+  void registerRpcFunction(
+      String name,
+      dynamic Function(
+              MockSupabaseDatabase database, Map<String, dynamic>? params)
+          function) {
+    _rpcFunctions[name] = function;
   }
 
   @override
   Future<StreamedResponse> send(BaseRequest request) async {
-    // Extract the table name from the URL
-    final tableName = _extractTableName(
-      url: request.url,
-      headers: request.headers,
-      method: request.method,
-    );
-
-    // Decode the request body if it's not a GET request
-    final body = (request.method != 'GET' &&
-                request.method != 'DELETE' &&
-                request.method != 'HEAD') &&
-            request is Request
-        ? jsonDecode(await request.finalize().transform(utf8.decoder).join())
-        : null;
-
-    // Handle different HTTP methods
-    switch (request.method) {
-      case 'POST':
-        // Handle upsert if the Prefer header is set
-        final preferHeader = request.headers['Prefer'];
-        if (preferHeader != null &&
-            preferHeader.contains('resolution=merge-duplicates')) {
-          return _handleUpsert(tableName, body, request);
-        }
-        return _handleInsert(tableName, body, request);
-      case 'PATCH':
-        return _handleUpdate(tableName, body, request);
-      case 'DELETE':
-        return _handleDelete(tableName, body, request);
-      case 'GET':
-        return _handleSelect(tableName, request.url.queryParameters, request);
-      case 'HEAD':
-        return _handleHead(tableName, request.url.queryParameters, request);
-      default:
-        return _createResponse({'error': 'Method not allowed'},
-            statusCode: 405, request: request);
+    // Decode the request body if it's not a GET, DELETE, or HEAD request
+    dynamic body;
+    if (request.method != 'GET' &&
+        request.method != 'DELETE' &&
+        request.method != 'HEAD' &&
+        request is Request) {
+      final String requestBody =
+          await request.finalize().transform(utf8.decoder).join();
+      if (requestBody.isNotEmpty) {
+        body = jsonDecode(requestBody);
+      }
     }
+
+    // Extract the table name or RPC function name from the URL
+    final pathSegments = request.url.pathSegments;
+    final restIndex = pathSegments.indexOf('v1');
+    if (restIndex != -1 && restIndex < pathSegments.length - 1) {
+      final resourceName = pathSegments[restIndex + 1];
+
+      if (resourceName == 'rpc') {
+        // Handle RPC call
+        if (pathSegments.length > restIndex + 2) {
+          final functionName = pathSegments[restIndex + 2];
+          return _handleRpc(functionName, request, body);
+        } else {
+          return _createResponse({'error': 'RPC function name not provided'},
+              statusCode: 400, request: request);
+        }
+      } else {
+        // Handle regular database operations
+        final tableName = _extractTableName(
+          url: request.url,
+          headers: request.headers,
+          method: request.method,
+        );
+
+        // Handle different HTTP methods
+        switch (request.method) {
+          case 'POST':
+            // Handle upsert if the Prefer header is set
+            final preferHeader = request.headers['Prefer'];
+            if (preferHeader != null &&
+                preferHeader.contains('resolution=merge-duplicates')) {
+              return _handleUpsert(tableName, body, request);
+            }
+            return _handleInsert(tableName, body, request);
+          case 'PATCH':
+            return _handleUpdate(tableName, body, request);
+          case 'DELETE':
+            return _handleDelete(tableName, body, request);
+          case 'GET':
+            return _handleSelect(
+                tableName, request.url.queryParameters, request);
+          case 'HEAD':
+            return _handleHead(tableName, request.url.queryParameters, request);
+          default:
+            return _createResponse({'error': 'Method not allowed'},
+                statusCode: 405, request: request);
+        }
+      }
+    }
+    throw Exception('Invalid URL format: unable to extract table name');
   }
 
   String _extractTableName({
@@ -705,5 +746,24 @@ class MockSupabaseHttpClient extends BaseClient {
       headers: responseHeaders,
       request: request,
     );
+  }
+
+  StreamedResponse _handleRpc(
+      String functionName, BaseRequest request, dynamic body) {
+    if (!_rpcFunctions.containsKey(functionName)) {
+      return _createResponse({'error': 'RPC function not found'},
+          statusCode: 404, request: request);
+    }
+
+    final function = _rpcFunctions[functionName]!;
+
+    try {
+      final mockDatabase = MockSupabaseDatabase(_database);
+      final result = function(mockDatabase, body);
+      return _createResponse(result, request: request);
+    } catch (e) {
+      return _createResponse({'error': 'RPC function execution failed: $e'},
+          statusCode: 500, request: request);
+    }
   }
 }

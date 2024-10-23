@@ -863,4 +863,82 @@ void main() {
       expect(posts.first, {'title': '😀'});
     });
   });
+
+  group('RPC function tests', () {
+    test('Call RPC function without parameters', () async {
+      final result = await mockSupabase.rpc('get_server_time');
+      expect(result, isA<Map<String, dynamic>>());
+      expect(result, containsPair('current_time', isA<String>()));
+    });
+
+    test('Call RPC function with parameters', () async {
+      final result =
+          await mockSupabase.rpc('calculate_sum', params: {'a': 5, 'b': 3});
+      expect(result, isA<Map<String, dynamic>>());
+      expect(result, containsPair('sum', 8));
+    });
+
+    test('Call RPC function that returns a list', () async {
+      final result = await mockSupabase.rpc('get_recent_posts');
+      expect(result, isA<List>());
+      expect(result, hasLength(greaterThan(0)));
+      expect(result.first, isA<Map<String, dynamic>>());
+      expect(result.first, containsPair('id', isA<int>()));
+      expect(result.first, containsPair('title', isA<String>()));
+    });
+
+    test('Call RPC function with complex parameters and return value',
+        () async {
+      final result = await mockSupabase.rpc('process_order', params: {
+        'order': {
+          'id': 1001,
+          'customer': 'John Doe',
+          'items': [
+            {'product': 'Widget A', 'price': 10, 'quantity': 2},
+            {'product': 'Widget B', 'price': 15, 'quantity': 1},
+          ],
+        }
+      });
+      expect(result, isA<Map<String, dynamic>>());
+      expect(
+          result, containsPair('processed_order', isA<Map<String, dynamic>>()));
+      expect(result['processed_order'], containsPair('status', 'processed'));
+      expect(result['processed_order'], containsPair('total', 35));
+    });
+
+    test('Call non-existent RPC function', () async {
+      expect(() => mockSupabase.rpc('non_existent_function'),
+          throwsA(isA<Exception>()));
+    });
+
+    test('Call RPC function that modifies database', () async {
+      // Insert initial data
+      await mockSupabase.from('users').insert([
+        {'id': 1, 'name': 'Alice', 'points': 100},
+        {'id': 2, 'name': 'Bob', 'points': 150},
+      ]);
+
+      // Call RPC function to update user points
+      final result = await mockSupabase.rpc('update_user_points',
+          params: {'user_id': 1, 'points_to_add': 50});
+
+      expect(result, isA<Map<String, dynamic>>());
+      expect(result, containsPair('success', true));
+      expect(result, containsPair('new_points', 150));
+
+      // Verify the database was updated
+      final updatedUser =
+          await mockSupabase.from('users').select().eq('id', 1).single();
+      expect(updatedUser, isA<Map<String, dynamic>>());
+      expect(updatedUser, containsPair('name', 'Alice'));
+      expect(updatedUser, containsPair('points', 150));
+
+      // Verify other users were not affected
+      final otherUser =
+          await mockSupabase.from('users').select().eq('id', 2).single();
+      expect(otherUser, isA<Map<String, dynamic>>());
+      expect(otherUser, containsPair('name', 'Bob'));
+      expect(otherUser, containsPair('points', 150));
+    });
+  });
 }
