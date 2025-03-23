@@ -425,7 +425,7 @@ void main() {
 - aggregate functions are not supported.
 - Respect nullsFirst on ordering is not supported.
 - The errors thrown by the mock Supabase client is not the same as the actual Supabase client.
-- The mock Supabase client does not support auth, realtime, storage, or calling edge functions.
+- The mock Supabase client does not support auth, realtime or storage.
     - You can either mock those using libraries like [mockito](https://pub.dev/packages/mockito) or use the Supabase CLI to do a full integration testing. You could use our [GitHub actions](https://github.com/supabase/setup-cli) to do that.
 
 We will work on adding more features to the mock Supabase client to make it more feature complete.
