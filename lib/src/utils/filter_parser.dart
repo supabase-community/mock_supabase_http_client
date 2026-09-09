@@ -68,7 +68,7 @@ class FilterParser {
       return (row) => row[columnName] == null;
     } else if (postrestFilter.startsWith('in.')) {
       final value = postrestFilter.substring(3);
-      final values = value.substring(1, value.length - 1).split(',');
+      final values = _parseList(value.substring(1, value.length - 1));
       return (row) => values.contains(row[columnName].toString());
     } else if (postrestFilter.startsWith('cs.')) {
       final value = postrestFilter.substring(3);
@@ -117,6 +117,33 @@ class FilterParser {
       return (row) => !filter(row);
     }
     return (row) => true;
+  }
+
+  /// Splits the body of a Postgrest list on the commas that separate its
+  /// elements, then unquotes and unescapes each element.
+  ///
+  /// Postgrest quotes any element that is not a bare number and escapes `\`
+  /// and `"` inside it, so a naive split on commas would break on values that
+  /// contain a comma or a quote.
+  static List<String> _parseList(String body) {
+    final values = <String>[];
+    final buffer = StringBuffer();
+    var insideQuotes = false;
+    for (var index = 0; index < body.length; index++) {
+      final character = body[index];
+      if (character == '\\' && insideQuotes && index + 1 < body.length) {
+        buffer.write(body[++index]);
+      } else if (character == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (character == ',' && !insideQuotes) {
+        values.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(character);
+      }
+    }
+    values.add(buffer.toString());
+    return values;
   }
 
   /// Handles comparison operations for date and numeric values.
