@@ -550,6 +550,9 @@ class MockSupabaseHttpClient extends BaseClient {
 
     // Handle basic filtering
     queryParams.forEach((key, value) {
+      if (returningRows.isEmpty) {
+        return;
+      }
       if (key != 'select' &&
           key != 'order' &&
           key != 'limit' &&
