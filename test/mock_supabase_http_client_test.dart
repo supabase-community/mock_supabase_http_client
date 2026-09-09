@@ -104,6 +104,61 @@ void main() {
       expect(postsAfterUpdate.first, updatedData);
     });
 
+    test('Upsert with ignoreDuplicates leaves the conflicting row untouched',
+        () async {
+      const table = 'users';
+      await mockSupabase.from(table).insert({'id': 1, 'name': 'John Doe'});
+
+      await mockSupabase.from(table).upsert(
+        {'id': 1, 'name': 'James Bond'},
+        ignoreDuplicates: true,
+      );
+
+      final users = await mockSupabase.from(table).select();
+      expect(users.length, 1);
+      expect(users.first, {'id': 1, 'name': 'John Doe'});
+    });
+
+    test(
+        'Upsert with ignoreDuplicates and an onConflict column leaves the '
+        'conflicting row untouched', () async {
+      const table = 'users';
+      await mockSupabase.from(table).insert({'user_id': 1, 'name': 'John Doe'});
+
+      await mockSupabase.from(table).upsert(
+        {'user_id': 1, 'name': 'James Bond'},
+        onConflict: 'user_id',
+        ignoreDuplicates: true,
+      );
+
+      final users = await mockSupabase.from(table).select();
+      expect(users.length, 1);
+      expect(users.first, {'user_id': 1, 'name': 'John Doe'});
+    });
+
+    test('Upsert with ignoreDuplicates inserts non-conflicting rows', () async {
+      const table = 'users';
+      await mockSupabase.from(table).insert({'id': 1, 'name': 'John Doe'});
+
+      final inserted = await mockSupabase.from(table).upsert(
+        [
+          {'id': 1, 'name': 'James Bond'},
+          {'id': 2, 'name': 'Jane Doe'},
+        ],
+        ignoreDuplicates: true,
+      ).select();
+
+      expect(inserted, [
+        {'id': 2, 'name': 'Jane Doe'}
+      ]);
+      final users =
+          await mockSupabase.from(table).select().order('id', ascending: true);
+      expect(users, [
+        {'id': 1, 'name': 'John Doe'},
+        {'id': 2, 'name': 'Jane Doe'},
+      ]);
+    });
+
     test('Upsert then select', () async {
       // Test upserting a record
       await mockSupabase
