@@ -132,6 +132,34 @@ void main() {
       expect(posts.length, 0);
     });
 
+    test('Select with a referenced table filter after deleting all items',
+        () async {
+      // Insert an item
+      await mockSupabase.from('posts').insert({
+        'id': 1,
+        'title': 'To be deleted',
+        'authors': {'id': 1, 'name': 'Author One'}
+      });
+      await mockSupabase.from('posts').delete().eq('id', 1);
+      final posts = await mockSupabase
+          .from('posts')
+          .select('*, authors(*)')
+          .eq('authors.name', 'Author One');
+      expect(posts.length, 0);
+    });
+
+    test('Select with chained filters where the first returns no rows',
+        () async {
+      // Insert an item
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .eq('id', 2)
+          .eq('title', 'First post');
+      expect(posts.length, 0);
+    });
+
     test('Select all columns', () async {
       // Test selecting all records
       await mockSupabase.from('posts').insert([

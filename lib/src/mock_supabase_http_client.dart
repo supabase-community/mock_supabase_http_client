@@ -499,6 +499,9 @@ class MockSupabaseHttpClient extends BaseClient {
 
     // Handle basic filtering
     queryParams.forEach((key, value) {
+      if (returningRows.isEmpty) {
+        return;
+      }
       if (key != 'select' &&
           key != 'order' &&
           key != 'limit' &&
@@ -541,7 +544,7 @@ class MockSupabaseHttpClient extends BaseClient {
           }).toList();
         } else if (key.contains('!inner')) {
           // referenced table filtering with !inner
-        } else if (returningRows.isNotEmpty) {
+        } else {
           // Regular filtering on the top level table
           final filter = FilterParser.parseFilter(
             columnName: key,
