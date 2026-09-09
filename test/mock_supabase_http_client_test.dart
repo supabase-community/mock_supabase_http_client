@@ -784,6 +784,113 @@ void main() {
       expect(() => mockSupabase.from('posts').select().maybeSingle(),
           throwsException);
     });
+
+    test('Insert then single', () async {
+      final post = await mockSupabase
+          .from('posts')
+          .insert({'id': 1, 'title': 'First post'})
+          .select()
+          .single();
+      expect(post, {'id': 1, 'title': 'First post'});
+    });
+
+    test('Insert then maybeSingle', () async {
+      final post = await mockSupabase
+          .from('posts')
+          .insert({'id': 1, 'title': 'First post'})
+          .select()
+          .maybeSingle();
+      expect(post, {'id': 1, 'title': 'First post'});
+    });
+
+    test('Insert multiple rows then single throws', () async {
+      expect(
+        () => mockSupabase
+            .from('posts')
+            .insert([
+              {'id': 1, 'title': 'First post'},
+              {'id': 2, 'title': 'Second post'},
+            ])
+            .select()
+            .single(),
+        throwsA(isA<PostgrestException>()
+            .having((error) => error.code, 'code', 'PGRST116')),
+      );
+    });
+
+    test('Upsert then single', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final post = await mockSupabase
+          .from('posts')
+          .upsert({'id': 1, 'title': 'Updated post'})
+          .select()
+          .single();
+      expect(post, {'id': 1, 'title': 'Updated post'});
+    });
+
+    test('Update then single', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final post = await mockSupabase
+          .from('posts')
+          .update({'title': 'Updated post'})
+          .eq('id', 1)
+          .select()
+          .single();
+      expect(post, {'id': 1, 'title': 'Updated post'});
+    });
+
+    test('Delete then single', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final post = await mockSupabase
+          .from('posts')
+          .delete()
+          .eq('id', 1)
+          .select()
+          .single();
+      expect(post, {'id': 1, 'title': 'First post'});
+    });
+
+    test('Select single with no rows throws', () async {
+      expect(
+        () => mockSupabase.from('posts').select().single(),
+        throwsA(isA<PostgrestException>()
+            .having((error) => error.code, 'code', 'PGRST116')),
+      );
+    });
+
+    test('Delete with no match then maybeSingle returns null', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final post = await mockSupabase
+          .from('posts')
+          .delete()
+          .eq('id', 2)
+          .select()
+          .maybeSingle();
+      expect(post, null);
+    });
+
+    test('Single with count', () async {
+      await mockSupabase.from('posts').insert({'id': 1, 'title': 'First post'});
+      final response = await mockSupabase
+          .from('posts')
+          .select()
+          .single()
+          .count(CountOption.exact);
+      expect(response.data, {'id': 1, 'title': 'First post'});
+      expect(response.count, 1);
+    });
+
+    test('Select single with multiple rows throws', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'},
+      ]);
+      expect(
+        () => mockSupabase.from('posts').select().single(),
+        throwsA(isA<PostgrestException>()
+            .having((error) => error.code, 'code', 'PGRST116')),
+      );
+    });
   });
 
   group('Referenced table queries', () {
