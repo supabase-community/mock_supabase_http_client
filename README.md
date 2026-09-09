@@ -1,5 +1,8 @@
 # MockSupabaseHttpClient
 
+> [!WARNING]
+> This package will be discontinued soon. Once version 3 of `supabase_flutter` is released, use the [`supabase_test`](https://pub.dev/packages/supabase_test) package instead.
+
 An mock http client for testing Supabase APIs.
 By passing the `MockSupabaseHttpClient` to the Supabase client, you can create a mock Supabase client that you can use for unit testing your Supabase API calls without making actual network requests.
 
@@ -30,7 +33,7 @@ final mockSupabase = SupabaseClient(
 Add mock_supabase_http_client to your dev dependencies:
 ```yaml
 dev_dependencies:
-  mock_supabase_http_client: ^0.0.1
+  mock_supabase_http_client: ^0.1.0
 ```
 
 ## Usage
