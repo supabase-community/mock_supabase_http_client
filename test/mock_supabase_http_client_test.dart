@@ -380,10 +380,40 @@ void main() {
       final posts =
           await mockSupabase.from('posts').select().inFilter('id', [1, 2]);
       expect(posts.length, 2);
+    });
 
-      final strPosts =
-          await mockSupabase.from('posts').select().inFilter('title', ["First post"]);
-      expect(strPosts.length, 1);
+    test('Filter by in with string values', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'First post'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .inFilter('title', ['First post']);
+      expect(posts.length, 1);
+    });
+
+    test('Filter by in with a value containing a comma', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'Hello, world'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts = await mockSupabase
+          .from('posts')
+          .select()
+          .inFilter('title', ['Hello, world']);
+      expect(posts.length, 1);
+    });
+
+    test('Filter by in with a value containing a double quote', () async {
+      await mockSupabase.from('posts').insert([
+        {'id': 1, 'title': 'a"b'},
+        {'id': 2, 'title': 'Second post'}
+      ]);
+      final posts =
+          await mockSupabase.from('posts').select().inFilter('title', ['a"b']);
+      expect(posts.length, 1);
     });
     group('Not filters', () {
       setUp(() async {
