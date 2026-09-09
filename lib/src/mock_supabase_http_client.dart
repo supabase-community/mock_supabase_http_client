@@ -378,12 +378,12 @@ class MockSupabaseHttpClient extends BaseClient {
 
     if (data is Map<String, dynamic>) {
       _database[tableKey]!.add(data);
-      return _createResponse([data], request: request);
+      return _createRowsResponse([data], request: request);
     } else if (data is List) {
       final List<Map<String, dynamic>> items =
           List<Map<String, dynamic>>.from(data);
       _database[tableKey]!.addAll(items);
-      return _createResponse(items, request: request);
+      return _createRowsResponse(items, request: request);
     } else {
       return _createResponse({'error': 'Invalid data format'},
           statusCode: 400, request: request);
@@ -412,7 +412,7 @@ class MockSupabaseHttpClient extends BaseClient {
     var updated = false;
 
     // Track updated rows
-    final updatedRows = [];
+    final updatedRows = <Map<String, dynamic>>[];
 
     // Update items that match the filters
     if (_database.containsKey(tableKey)) {
@@ -426,7 +426,7 @@ class MockSupabaseHttpClient extends BaseClient {
     }
 
     if (updated) {
-      return _createResponse(updatedRows, request: request);
+      return _createRowsResponse(updatedRows, request: request);
     } else {
       return _createResponse({'error': 'Not found'},
           statusCode: 404, request: request);
@@ -503,7 +503,7 @@ class MockSupabaseHttpClient extends BaseClient {
       return item;
     }).toList();
 
-    return _createResponse(results, request: request);
+    return _createRowsResponse(results, request: request);
   }
 
   StreamedResponse _handleDelete(
@@ -520,7 +520,7 @@ class MockSupabaseHttpClient extends BaseClient {
           statusCode: 400, request: request);
     }
 
-    List removedItems = [];
+    final removedItems = <Map<String, dynamic>>[];
     if (_database.containsKey(tableKey)) {
       _database[tableKey]!.removeWhere((row) {
         final matched = _matchesFilters(row: row, filters: queryParams);
@@ -531,7 +531,7 @@ class MockSupabaseHttpClient extends BaseClient {
       });
     }
 
-    return _createResponse(removedItems, request: request);
+    return _createRowsResponse(removedItems, request: request);
   }
 
   StreamedResponse _handleSelect(
@@ -543,7 +543,7 @@ class MockSupabaseHttpClient extends BaseClient {
     final tableKey = '$schema.$table';
     // Handle selecting data from the mock database
     if (!_database.containsKey(tableKey)) {
-      return _createResponse([], request: request);
+      return _createRowsResponse([], request: request);
     }
 
     var returningRows = List<Map<String, dynamic>>.from(_database[tableKey]!);
@@ -740,39 +740,14 @@ class MockSupabaseHttpClient extends BaseClient {
       final countType =
           preferHeader.contains('count=exact') ? 'exact' : 'planned';
 
-      return _createResponse(returningRows, request: request, headers: {
+      return _createRowsResponse(returningRows, request: request, headers: {
         'content-range': '$offset-${offset + returningRows.length}/$countValue',
         'content-profile': tableKey,
         'preference-applied': 'count=$countType'
       });
     }
 
-    // Handle single
-    if (request.headers['Accept'] == 'application/vnd.pgrst.object+json') {
-      if (returningRows.length == 1) {
-        return _createResponse(returningRows.first, request: request);
-      } else {
-        return _createResponse({
-          'error': '${returningRows.length} rows were found for single query'
-        }, request: request);
-      }
-    }
-
-    // Handle maybeSingle
-    if (request.headers['Accept'] == 'application/json') {
-      if (returningRows.isEmpty) {
-        return _createResponse(null, request: request);
-      } else if (returningRows.length == 1) {
-        return _createResponse(returningRows.first, request: request);
-      } else {
-        return _createResponse({
-          'error':
-              '${returningRows.length} rows were found for maybeSingle query'
-        }, statusCode: 405, request: request);
-      }
-    }
-
-    return _createResponse(returningRows, request: request);
+    return _createRowsResponse(returningRows, request: request);
   }
 
   StreamedResponse _handleHead(
@@ -832,6 +807,39 @@ class MockSupabaseHttpClient extends BaseClient {
         'content-profile': tableKey,
       },
       request: request,
+    );
+  }
+
+  /// Creates a response body shaped the way PostgREST would shape it for the
+  /// request's `Accept` header.
+  ///
+  /// A request made through `.single()` asks for
+  /// `application/vnd.pgrst.object+json`, which returns a single object rather
+  /// than a list, and fails with a 406 when the result does not contain
+  /// exactly one row.
+  StreamedResponse _createRowsResponse(
+    List<Map<String, dynamic>> rows, {
+    required BaseRequest request,
+    Map<String, String>? headers,
+  }) {
+    final accept = request.headers['Accept'] ?? '';
+    if (!accept.startsWith('application/vnd.pgrst.object+json')) {
+      return _createResponse(rows, request: request, headers: headers);
+    }
+    if (rows.length == 1) {
+      return _createResponse(rows.first, request: request, headers: headers);
+    }
+    return _createResponse(
+      {
+        'code': 'PGRST116',
+        'details': 'Results contain ${rows.length} rows, '
+            'application/vnd.pgrst.object+json requires 1 row',
+        'hint': null,
+        'message': 'JSON object requested, multiple (or no) rows returned',
+      },
+      statusCode: 406,
+      request: request,
+      headers: headers,
     );
   }
 
