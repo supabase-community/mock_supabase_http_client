@@ -270,7 +270,8 @@ class MockSupabaseHttpClient extends BaseClient {
     } else if (request.method == 'POST') {
       final preferHeader = request.headers['Prefer'];
       if (preferHeader != null &&
-          preferHeader.contains('resolution=merge-duplicates')) {
+          (preferHeader.contains('resolution=merge-duplicates') ||
+              preferHeader.contains('resolution=ignore-duplicates'))) {
         requestType = RequestType.upsert;
       } else {
         requestType = RequestType.insert;
@@ -478,30 +479,41 @@ class MockSupabaseHttpClient extends BaseClient {
             .map((e) => e.trim())
             .toList();
 
+    // Rows that conflict are left untouched when the caller asked for
+    // `ignoreDuplicates`, and merged into otherwise
+    final ignoreDuplicates =
+        request.headers['Prefer']?.contains('resolution=ignore-duplicates') ??
+            false;
+
     // Upsert each item
-    final results = items.map((item) {
+    final results = <Map<String, dynamic>>[];
+    for (final item in items) {
       // Check if all onConflictColumns are set in item
-      final shouldUpdate =
+      final hasConflictTarget =
           onConflictColumns.every((column) => item[column] != null);
 
-      if (shouldUpdate) {
+      if (hasConflictTarget) {
         // Find the index for an item that matches all onConflictColumns
         final index = _database[tableKey]!.indexWhere((dbItem) =>
             onConflictColumns
                 .every((column) => dbItem[column] == item[column]));
 
         if (index != -1) {
+          if (ignoreDuplicates) {
+            continue;
+          }
           // Update the item in the database
           _database[tableKey]![index] = {
             ..._database[tableKey]![index],
             ...item
           };
-          return _database[tableKey]![index];
+          results.add(_database[tableKey]![index]);
+          continue;
         }
       }
       _database[tableKey]!.add(item);
-      return item;
-    }).toList();
+      results.add(item);
+    }
 
     return _createResponse(results, request: request);
   }
