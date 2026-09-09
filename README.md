@@ -21,6 +21,7 @@ final mockSupabase = SupabaseClient(
 - Add mock data to the mock Supabase client
 - Supports select, insert, update, upsert, and delete operations
 - Supports filtering, ordering, and limiting results
+- Supports count and head requests
 - Supports referenced table operations
 - Can reset the mock data between tests
 
@@ -421,11 +422,10 @@ void main() {
     ```
 - `!inner` join is not supported.
 - Renaming column names is not supported.
-- count and head requests are not supported.
 - aggregate functions are not supported.
-- Respect nullsFirst on ordering is not supported.
+- `nullsFirst` on ordering is not supported. Ordering by a column that contains `null` throws instead of sorting.
 - The errors thrown by the mock Supabase client is not the same as the actual Supabase client.
-- The mock Supabase client does not support auth, realtime or storage.
+- The mock Supabase client does not support auth, realtime, or storage.
     - You can either mock those using libraries like [mockito](https://pub.dev/packages/mockito) or use the Supabase CLI to do a full integration testing. You could use our [GitHub actions](https://github.com/supabase/setup-cli) to do that.
 
 We will work on adding more features to the mock Supabase client to make it more feature complete.
