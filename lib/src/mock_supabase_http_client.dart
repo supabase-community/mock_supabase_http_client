@@ -471,13 +471,27 @@ class MockSupabaseHttpClient extends BaseClient {
         ? List<Map<String, dynamic>>.from(data)
         : [Map<String, dynamic>.from(data)];
 
+    // Get the onConflict columns
+    final onConflictColumns =
+        (request.url.queryParameters['on_conflict'] ?? 'id')
+            .split(',')
+            .map((e) => e.trim())
+            .toList();
+
     // Upsert each item
     final results = items.map((item) {
-      final id = item['id'];
-      if (id != null) {
-        final index =
-            _database[tableKey]!.indexWhere((dbItem) => dbItem['id'] == id);
+      // Check if all onConflictColumns are set in item
+      final shouldUpdate =
+          onConflictColumns.every((column) => item[column] != null);
+
+      if (shouldUpdate) {
+        // Find the index for an item that matches all onConflictColumns
+        final index = _database[tableKey]!.indexWhere((dbItem) =>
+            onConflictColumns
+                .every((column) => dbItem[column] == item[column]));
+
         if (index != -1) {
+          // Update the item in the database
           _database[tableKey]![index] = {
             ..._database[tableKey]![index],
             ...item

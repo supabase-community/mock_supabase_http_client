@@ -61,6 +61,49 @@ void main() {
       expect(postsUfterUpdate.first, {'id': 1, 'title': 'Updated post'});
     });
 
+    test('Upsert with single onConflict column, not id', () async {
+      final data = {'user_id': 1, 'name': 'John Doe'};
+      const table = 'users';
+      // Insert a record
+      await mockSupabase.from(table).insert(data);
+      final users = await mockSupabase.from(table).select();
+      expect(users.first, data);
+
+      final updatedData = {
+        ...data,
+        'name': 'James Bond',
+      };
+      await mockSupabase.from(table).upsert(
+            updatedData,
+            onConflict: 'user_id',
+          );
+      final usersAfterUpdate =
+          await mockSupabase.from(table).select().eq('user_id', 1);
+      expect(usersAfterUpdate.length, 1);
+      expect(usersAfterUpdate.first, updatedData);
+    });
+
+    test('Upsert with multiple onConflict columns', () async {
+      final data = {'user': 2, 'post': 1, 'title': 'Initial post'};
+      // Test upserting a record
+      await mockSupabase.from('posts').insert(data);
+      final posts = await mockSupabase.from('posts').select();
+      expect(posts.first, data);
+
+      final updatedData = {
+        ...data,
+        'title': 'Updated post',
+      };
+      await mockSupabase.from('posts').upsert(
+            updatedData,
+            onConflict: 'user, post',
+          );
+      final postsAfterUpdate =
+          await mockSupabase.from('posts').select().eq('user', 2).eq('post', 1);
+      expect(postsAfterUpdate.length, 1);
+      expect(postsAfterUpdate.first, updatedData);
+    });
+
     test('Upsert then select', () async {
       // Test upserting a record
       await mockSupabase
